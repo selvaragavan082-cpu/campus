@@ -1,13 +1,42 @@
 import axios from 'axios';
 
+// Smart URL resolver ensuring proper /api suffix without double slashes
+export const getBaseURL = () => {
+  let envUrl = import.meta.env.VITE_API_URL;
+
+  // If running locally without explicit VITE_API_URL, use local /api proxy
+  if (!envUrl) {
+    if (
+      typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ) {
+      return '/api';
+    }
+    // Default fallback to Render backend
+    envUrl = 'https://campus-swp1.onrender.com';
+  }
+
+  let clean = envUrl.trim().replace(/\/+$/, '');
+
+  // If clean is simply '/api', return it as-is for local dev proxy
+  if (clean === '/api') return '/api';
+
+  // Ensure /api suffix exists on absolute URLs
+  if (!clean.endsWith('/api')) {
+    clean = `${clean}/api`;
+  }
+  return clean;
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: getBaseURL(),
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: false, // Avoid preflight issues with wildcard CORS
 });
 
-// Interceptor to attach token
+// Request interceptor to attach token
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('campus_token');
@@ -19,13 +48,16 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Interceptor to handle auth expiry
+// Response interceptor to handle auth expiry & clean error parsing
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      // Clear token if expired/invalid
-      if (!window.location.pathname.includes('/login') && !window.location.pathname.includes('/register')) {
+      if (
+        typeof window !== 'undefined' &&
+        !window.location.pathname.includes('/login') &&
+        !window.location.pathname.includes('/register')
+      ) {
         localStorage.removeItem('campus_token');
         localStorage.removeItem('campus_user');
       }

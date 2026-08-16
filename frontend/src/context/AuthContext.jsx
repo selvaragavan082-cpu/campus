@@ -5,15 +5,18 @@ const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
-    const savedUser = localStorage.getItem('campus_user');
-    return savedUser ? JSON.parse(savedUser) : null;
+    try {
+      const savedUser = localStorage.getItem('campus_user');
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch {
+      return null;
+    }
   });
   const [token, setToken] = useState(() => localStorage.getItem('campus_token') || null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (token) {
-      // Validate or refresh profile
       authService
         .getMe()
         .then((res) => {
@@ -23,7 +26,6 @@ export const AuthProvider = ({ children }) => {
           }
         })
         .catch(() => {
-          // Token invalid
           logout();
         });
     }
@@ -41,9 +43,14 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('campus_user', JSON.stringify(userData));
         return { success: true, user: userData };
       }
-      return { success: false, message: 'Invalid response from server' };
+      return { success: false, message: res.data?.message || 'Login failed' };
     } catch (err) {
-      const message = err.response?.data?.message || 'Login failed. Please check credentials.';
+      console.error('Login Error:', err.response?.data || err.message);
+      const message =
+        err.response?.data?.message ||
+        (err.message === 'Network Error'
+          ? 'Cannot connect to backend server. Please check your internet connection or backend URL.'
+          : err.message || 'Login failed');
       return { success: false, message };
     } finally {
       setLoading(false);
@@ -60,11 +67,16 @@ export const AuthProvider = ({ children }) => {
         setToken(userData.token);
         localStorage.setItem('campus_token', userData.token);
         localStorage.setItem('campus_user', JSON.stringify(userData));
-        return { success: true, user: userData };
+        return { success: true, user: userData, message: res.data.message };
       }
-      return { success: false, message: 'Registration failed' };
+      return { success: false, message: res.data?.message || 'Registration failed' };
     } catch (err) {
-      const message = err.response?.data?.message || 'Registration failed.';
+      console.error('Registration Error Details:', err.response?.data || err.message);
+      const message =
+        err.response?.data?.message ||
+        (err.message === 'Network Error'
+          ? 'Network Error: Cannot connect to backend server (https://campus-swp1.onrender.com). Please ensure backend is active.'
+          : err.message || 'Registration failed.');
       return { success: false, message };
     } finally {
       setLoading(false);

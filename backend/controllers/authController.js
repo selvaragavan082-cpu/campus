@@ -13,29 +13,73 @@ const generateToken = (id) => {
 // @access  Public
 const registerUser = async (req, res) => {
   try {
-    const { name, email, password, role, department, semester, rollNumber, employeeId, designation, phone } = req.body;
+    const {
+      name,
+      fullName,
+      email,
+      password,
+      role,
+      department,
+      semester,
+      rollNumber,
+      rollNo,
+      employeeId,
+      designation,
+      phone,
+      section,
+    } = req.body;
 
-    const userExists = await User.findOne({ email: email.toLowerCase() });
-    if (userExists) {
-      return res.status(400).json({ success: false, message: 'User already exists with this email' });
+    const resolvedName = (name || fullName || '').trim();
+    const resolvedEmail = (email || '').trim().toLowerCase();
+    const resolvedPassword = password || '';
+    const resolvedRoll = (rollNumber || rollNo || '').trim();
+
+    // Field validation
+    if (!resolvedName) {
+      return res.status(400).json({ success: false, message: 'Full name is required' });
     }
 
+    if (!resolvedEmail) {
+      return res.status(400).json({ success: false, message: 'Email address is required' });
+    }
+
+    const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
+    if (!emailRegex.test(resolvedEmail)) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid email address' });
+    }
+
+    if (!resolvedPassword || resolvedPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long' });
+    }
+
+    // Check existing email
+    const userExists = await User.findOne({ email: resolvedEmail });
+    if (userExists) {
+      return res.status(400).json({
+        success: false,
+        message: 'An account with this email already exists. Please sign in instead.',
+      });
+    }
+
+    // Create user record
     const user = await User.create({
-      name,
-      email: email.toLowerCase(),
-      password,
+      name: resolvedName,
+      email: resolvedEmail,
+      password: resolvedPassword,
       role: role || 'student',
       department: department || 'Computer Science',
-      semester: semester || 1,
-      rollNumber: rollNumber || '',
-      employeeId: employeeId || '',
-      designation: designation || 'Assistant Professor',
-      phone: phone || '',
+      semester: Number(semester) || 1,
+      section: (section || 'A').toUpperCase(),
+      rollNumber: resolvedRoll,
+      employeeId: (employeeId || '').trim(),
+      designation: (designation || 'Assistant Professor').trim(),
+      phone: (phone || '').trim(),
     });
 
     if (user) {
       res.status(201).json({
         success: true,
+        message: 'Registration successful! Welcome to CampusAssist AI.',
         data: {
           _id: user._id,
           name: user.name,
@@ -43,19 +87,42 @@ const registerUser = async (req, res) => {
           role: user.role,
           department: user.department,
           semester: user.semester,
+          section: user.section,
           rollNumber: user.rollNumber,
           employeeId: user.employeeId,
           designation: user.designation,
           phone: user.phone,
+          avatar: user.avatar,
           token: generateToken(user._id),
         },
       });
     } else {
-      res.status(400).json({ success: false, message: 'Invalid user data received' });
+      res.status(400).json({ success: false, message: 'Invalid user registration data received' });
     }
   } catch (error) {
-    console.error('Register error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Server error during registration' });
+    console.error('Register Controller Error:', error);
+
+    // Handle MongoDB duplicate key error
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'An account with this email already exists. Please log in.',
+      });
+    }
+
+    // Handle Mongoose schema validation errors
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map((val) => val.message);
+      return res.status(400).json({
+        success: false,
+        message: messages.join(', ') || 'Validation error during registration',
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Server error during user registration',
+    });
   }
 };
 
@@ -70,7 +137,8 @@ const loginUser = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide email and password' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const cleanEmail = email.trim().toLowerCase();
+    const user = await User.findOne({ email: cleanEmail });
 
     if (user && (await user.matchPassword(password))) {
       res.json({
@@ -82,6 +150,7 @@ const loginUser = async (req, res) => {
           role: user.role,
           department: user.department,
           semester: user.semester,
+          section: user.section,
           rollNumber: user.rollNumber,
           employeeId: user.employeeId,
           designation: user.designation,
@@ -91,7 +160,7 @@ const loginUser = async (req, res) => {
         },
       });
     } else {
-      res.status(401).json({ success: false, message: 'Invalid email or password' });
+      res.status(401).json({ success: false, message: 'Invalid email or password. Please try again.' });
     }
   } catch (error) {
     console.error('Login error:', error);
@@ -148,17 +217,17 @@ const updateProfile = async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    user.name = req.body.name || user.name;
-    user.phone = req.body.phone !== undefined ? req.body.phone : user.phone;
+    user.name = req.body.name ? req.body.name.trim() : user.name;
+    user.phone = req.body.phone !== undefined ? req.body.phone.trim() : user.phone;
     user.department = req.body.department || user.department;
-    
+
     if (user.role === 'student') {
-      user.semester = req.body.semester || user.semester;
-      user.rollNumber = req.body.rollNumber || user.rollNumber;
-      user.section = req.body.section || user.section;
+      user.semester = req.body.semester ? Number(req.body.semester) : user.semester;
+      user.rollNumber = req.body.rollNumber ? req.body.rollNumber.trim() : user.rollNumber;
+      user.section = req.body.section ? req.body.section.trim().toUpperCase() : user.section;
     } else if (user.role === 'staff') {
-      user.employeeId = req.body.employeeId || user.employeeId;
-      user.designation = req.body.designation || user.designation;
+      user.employeeId = req.body.employeeId ? req.body.employeeId.trim() : user.employeeId;
+      user.designation = req.body.designation ? req.body.designation.trim() : user.designation;
     }
 
     if (req.body.password) {
@@ -176,6 +245,7 @@ const updateProfile = async (req, res) => {
         role: updatedUser.role,
         department: updatedUser.department,
         semester: updatedUser.semester,
+        section: updatedUser.section,
         rollNumber: updatedUser.rollNumber,
         employeeId: updatedUser.employeeId,
         designation: updatedUser.designation,

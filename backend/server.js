@@ -12,17 +12,21 @@ connectDB();
 
 const app = express();
 
-// Middleware
+// Enable Permissive Cross-Origin Resource Sharing for Vercel and local dev
 app.use(
   cors({
-    origin: '*', // Allows local dev connections from Vite / CRA
+    origin: '*',
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   })
 );
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Pre-flight request handling
+app.options('*', cors());
+
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Serve static uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

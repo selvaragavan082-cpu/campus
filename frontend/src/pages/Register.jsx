@@ -12,6 +12,7 @@ import {
   Building,
   ArrowRight,
   AlertCircle,
+  CheckCircle2,
 } from 'lucide-react';
 
 const Register = () => {
@@ -33,21 +34,55 @@ const Register = () => {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccessMsg('');
+
+    // Pre-flight client validation
+    if (!formData.name.trim()) {
+      setError('Please enter your full name');
+      return;
+    }
+    if (!formData.email.trim()) {
+      setError('Please enter your email address');
+      return;
+    }
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters long');
+      return;
+    }
+
     setLoading(true);
 
-    const res = await register(formData);
+    const payload = {
+      name: formData.name.trim(),
+      email: formData.email.trim().toLowerCase(),
+      password: formData.password,
+      role: formData.role,
+      department: formData.department,
+      semester: Number(formData.semester) || 1,
+      rollNumber: formData.rollNumber.trim(),
+      rollNo: formData.rollNumber.trim(), // Support alternative key
+      employeeId: formData.employeeId.trim(),
+      designation: formData.designation.trim(),
+      phone: formData.phone.trim(),
+    };
+
+    const res = await register(payload);
     setLoading(false);
 
     if (res.success) {
-      if (res.user.role === 'admin') navigate('/admin');
-      else if (res.user.role === 'staff') navigate('/staff');
-      else navigate('/student');
+      setSuccessMsg('Account created successfully! Redirecting...');
+      setTimeout(() => {
+        if (res.user.role === 'admin') navigate('/admin');
+        else if (res.user.role === 'staff') navigate('/staff');
+        else navigate('/student');
+      }, 500);
     } else {
-      setError(res.message);
+      setError(res.message || 'Registration failed. Please verify the details entered.');
     }
   };
 
@@ -68,6 +103,13 @@ const Register = () => {
           <div className="mb-4 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2.5">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
+          </div>
+        )}
+
+        {successMsg && (
+          <div className="mb-4 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center gap-2.5">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{successMsg}</span>
           </div>
         )}
 
@@ -178,6 +220,7 @@ const Register = () => {
                   <option value="Civil">Civil</option>
                   <option value="Electrical">Electrical</option>
                   <option value="Administration">Administration</option>
+                  <option value="General">General</option>
                 </select>
               </div>
             </div>
